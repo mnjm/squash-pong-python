@@ -6,11 +6,11 @@ def check_if_val_pos(val, key):
 
 def check_and_convert_tuple(src, n_elements, key):
     flag = True
-    ret = None
+    ret = ()
     try:
         ret = tuple((int(x) for x in src.split(",")))
-    except valueerror:
-        err = true
+    except ValueError:
+        flag = False
     flag = flag and len(ret) == n_elements
     assert flag, "parsing {} failed. check its format".format(key)
     for val in ret:
@@ -23,7 +23,7 @@ def parse_args():
     default_opts = {}
     default_opts["screen_size"] = [(700, 500), "Screen size fmt:\"w,h\""]
     default_opts["wall_thickness"] = [30, "Wall thickness in pxls"]
-    default_opts["ball_radius"] = [40, "Ball's radius in pxls"]
+    default_opts["ball_radius"] = [10, "Ball's radius in pxls"]
     default_opts["paddle_size"] = [(15, 60), "Paddle size in pxls fmt:\"w,h\""]
     default_opts["score_canvas_height"] = [80, "Score canvas height in pxls"]
     default_opts["screen_color"] = [(0, 0, 0), "Scene background color fmt:\"r,g,b\""]
@@ -46,6 +46,8 @@ def parse_args():
             help = "Use opencv's display functions")
     parser.add_argument("--no_score_board", default = False, action = 'store_true',
             help = "Dont display scoreboard")
+    parser.add_argument("--no_reset_score", default = False, action = 'store_true',
+            help = "Dont reset the score after a loss")
     parser.add_argument("--debug", default = False, action = 'store_true',
             help = "Display debug info")
     args = parser.parse_args()

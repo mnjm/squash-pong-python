@@ -12,9 +12,12 @@ class Ball:
         self.reset()
 
     def reset(self):
-        self.rect = pygame.Rect(self.config.screen_size[0]//2 - self.config.ball_radius,
-                self.config.screen_size[1]//2 - self.config.ball_radius,
-                self.config.ball_radius//2, self.config.ball_radius//2)
+        # Ball rect
+        x = self.config.screen_size[0]//2 - self.config.ball_radius
+        y = self.config.screen_size[1]//2 - self.config.ball_radius
+        w = h = self.config.ball_radius * 2
+        self.rect = pygame.Rect(x, y, w, h)
+        # Set random direction
         self.velocity_x = self.config.ball_speed * np.random.choice([-1,1])
         self.velocity_y = self.config.ball_speed * np.random.choice([-1,1])
 
@@ -24,20 +27,32 @@ class Ball:
         x1, y1 = self.rect.x, self.rect.y
         x2, y2 = self.rect.x + self.rect.width, self.rect.y + self.rect.height
         screen_wo_wall = self.config.screen_size[1] - self.config.wall_thickness
-        if x1 <= self.config.wall_thickness:
-            self.velocity_x *= -1
-        if y1 <= self.config.wall_thickness or y2 >= screen_wo_wall:
-            self.velocity_y *= -1
-        # paddle bounce
-        new_rect = pygame.Rect(x1 - 1, y1 - 1, self.rect.width + 2, self.rect.height + 2)
-        # if self.rect.colliderect(paddle.rect):
-        if new_rect.colliderect(paddle.rect):
+        # paddle bounce event
+        if self.rect.colliderect(paddle.rect):
+            # Push the ball outside paddle rect
+            self.rect.x -= x2 - paddle.rect.x
             self.velocity_x *= -1
             point = +1
         elif x2 >= self.config.screen_size[0]:
+            self.rect.x = self.config.screen_size[0] - 2 * self.config.ball_radius
             point = -1
+        else:
+            # Left wall collide event
+            if x1 <= self.config.wall_thickness:
+                self.rect.x = self.config.wall_thickness
+                self.velocity_x *= -1
+            # Top and bottom wall collide event
+            if y1 <= self.config.wall_thickness:
+                self.rect.y = self.config.wall_thickness
+                self.velocity_y *= -1
+            elif y2 >= screen_wo_wall:
+                self.rect.y = screen_wo_wall - 2 * self.config.ball_radius
+                self.velocity_y *= -1
         self.rect.x += self.velocity_x
         self.rect.y += self.velocity_y
+        if self.config.debug:
+            print('Ball: x:{}, y:{}, vx:{}, vy:{}, point:{}'.format(x1, y1, self.velocity_x,
+                self.velocity_y, point), end=' ')
         return point
 
     def draw(self, screen):
@@ -50,6 +65,7 @@ class Paddle:
         self.reset()
 
     def reset(self):
+        # Start in the middle
         self.rect = pygame.Rect(self.config.screen_size[0] - self.config.paddle_size[0],
                 self.config.screen_size[1]//2 - self.config.paddle_size[1]//2,
                 self.config.paddle_size[0], self.config.paddle_size[1])
@@ -57,10 +73,14 @@ class Paddle:
 
     def update(self):
         self.rect.y += self.velocity
-        if self.rect.y <= self.config.wall_thickness:
+        y1, y2 = self.rect.y, self.rect.y + self.rect.height
+        if y1 <= self.config.wall_thickness:
             self.rect.y = self.config.wall_thickness
-        elif (self.rect.y + self.rect.height) >= (self.config.screen_size[1] - self.config.wall_thickness):
+        elif y2 >= (self.config.screen_size[1] - self.config.wall_thickness):
             self.rect.y = self.config.screen_size[1] - self.config.wall_thickness - self.config.paddle_size[1]
+        if self.config.debug:
+            print('Paddle: y:{}, vy:{}'.format(y1, self.velocity), end=' ')
+        return
 
     def draw(self, screen):
         pygame.draw.rect(screen, self.config.paddle_color, self.rect)
@@ -102,20 +122,29 @@ class SquashPong:
     def update(self, action):
         # Update action and collect reward
         # Returns reward and the img. img can be used to train RLML models
+
+        # Process event
         if action == SquashPong.PADDLE_UP:
-            self.paddle.velocity = -self.config.paddle_speed
+            self.paddle.velocity = self.config.paddle_speed * -1
         elif action == SquashPong.PADDLE_DOWN:
-            self.paddle.velocity = +self.config.paddle_speed
+            self.paddle.velocity = self.config.paddle_speed
         elif action == SquashPong.PADDLE_STAY:
             self.paddle.velocity = 0
+        # Updates
+        if self.config.debug:
+            events = ['PADDLE_UP', 'PADDLE_DOWN', 'PADDLE_STAY']
+            print('SquashPong: Event:{}'.format(events[action]), end=' ')
         self.paddle.update()
         reward = self.ball.update(self.paddle)
         self.score += reward
+        if self.config.debug: print()
         # reset the game if lost
         if reward < 0:
-            self.paddle.reset()
             self.ball.reset()
-            self.score = 0
+            if not self.config.no_reset_score:
+                self.score = 0
+                self.paddle.reset()
+
         # draw
         self.screen.fill(self.config.screen_color)
         for rect in self.walls_rect:
@@ -123,11 +152,13 @@ class SquashPong:
         self.paddle.draw(self.screen)
         self.ball.draw(self.screen)
         if self.render_score: self.render_score_board()
+
         # get image
         temp_buffer = pygame.surfarray.pixels3d(self.screen)
         img = temp_buffer.copy() # Deep copy
         del temp_buffer # Free the ref to redraw
-        img = np.swapaxes(img, 0, 1)[:self.config.screen_size[1],...] # get swap axes and remove score board if rendered
+        # Swap axes for opencv img and remove score board if rendered
+        img = np.swapaxes(img, 0, 1)[:self.config.screen_size[1],...]
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
         return reward, img
 
